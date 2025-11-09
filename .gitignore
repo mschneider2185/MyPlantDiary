@@ -1,0 +1,8 @@
+node_modules
+.next
+.env
+.env.*
+!.env.example
+.supabase
+.DS_Store
+.cursor
