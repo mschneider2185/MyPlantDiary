@@ -14,7 +14,10 @@ export async function GET(request: Request) {
   const next = url.searchParams.get("redirect");
 
   const redirectPath = isValidRedirect(next) ? next : DEFAULT_REDIRECT;
-  const redirectUrl = new URL(redirectPath, url.origin);
+  // url.origin should always exist for HTTP/HTTPS URLs, but TypeScript allows null
+  // Construct origin from protocol and host if origin is null (shouldn't happen in practice)
+  const baseUrl = url.origin || `${url.protocol}//${url.host}`;
+  const redirectUrl = new URL(redirectPath, baseUrl);
 
   if (!code) {
     redirectUrl.searchParams.set("auth", "missing_code");
