@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 type IdentificationResult = {
   provider: "plantnet";
@@ -66,6 +67,10 @@ export default function UploadPlantImage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedPlant, setSavedPlant] = useState<PlantRecord | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const sanitizedSoilMix =
     species?.soil_mix?.filter((mix) => {
@@ -130,6 +135,76 @@ export default function UploadPlantImage() {
     setSaveError(null);
     setSavedPlant(null);
   };
+
+  // Camera controls
+  const openCamera = async () => {
+    setCameraError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraOpen(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to access camera.";
+      setCameraError(message);
+      setCameraOpen(false);
+    }
+  };
+
+  const stopCamera = () => {
+    const stream = streamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+    }
+    streamRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const closeCamera = () => {
+    stopCamera();
+    setCameraOpen(false);
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setCameraError("Unable to capture image.");
+      return;
+    }
+    ctx.drawImage(video, 0, 0, width, height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+    const safe = await ensureJpegOrPng(dataUrl);
+    setImage(safe);
+    setResult(null);
+    setSpecies(null);
+    setError(null);
+    setNickname("");
+    setSaveError(null);
+    setSavedPlant(null);
+    closeCamera();
+  };
+
+  useEffect(() => {
+    return () => {
+      // Cleanup on unmount
+      stopCamera();
+    };
+  }, []);
 
   const onIdentify = async () => {
     if (!image) return;
@@ -210,7 +285,14 @@ export default function UploadPlantImage() {
     <div className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <input type="file" accept="image/*" onChange={onChange} />
+          <input type="file" accept="image/*" capture="environment" onChange={onChange} />
+          <button
+            type="button"
+            className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+            onClick={() => (cameraOpen ? closeCamera() : openCamera())}
+          >
+            {cameraOpen ? "Close Camera" : "Use Camera"}
+          </button>
           <button
             className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:pointer-events-none disabled:opacity-50"
             onClick={onIdentify}
@@ -230,9 +312,41 @@ export default function UploadPlantImage() {
         )}
       </div>
 
+      {cameraError && (
+        <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {cameraError}
+        </div>
+      )}
+
+      {cameraOpen && (
+        <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+          <div className="aspect-video w-full overflow-hidden rounded-xl bg-black">
+            <video ref={videoRef} playsInline muted className="h-full w-full object-contain" />
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={capturePhoto}
+              className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+            >
+              Capture
+            </button>
+            <button
+              type="button"
+              onClick={closeCamera}
+              className="rounded-lg border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {image && (
         <div className="mt-5">
-          <img src={image} alt="Uploaded plant" className="max-h-80 w-full rounded-2xl object-cover" />
+          <div className="relative h-80 w-full overflow-hidden rounded-2xl">
+            <Image src={image} alt="Uploaded plant" fill sizes="100vw" className="object-cover" />
+          </div>
         </div>
       )}
 

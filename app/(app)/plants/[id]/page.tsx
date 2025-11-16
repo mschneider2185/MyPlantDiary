@@ -1,6 +1,9 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Droplets, Sun, Thermometer, Waves, Leaf, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import PlantActions from "@/components/PlantActions";
+import PlantNotes from "@/components/PlantNotes";
 
 type SpeciesProfile = {
   id: string;
@@ -89,7 +92,7 @@ export default async function PlantDetail({ params }: { params: { id: string } }
     return (
       <div className="space-y-6 py-10">
         <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-6 text-sm text-emerald-900">
-          We couldn't find that plant record. It may have been removed or never saved.
+          We couldn&apos;t find that plant record. It may have been removed or never saved.
         </div>
         <Link href="/" className="inline-flex items-center text-sm font-medium text-emerald-600 hover:text-emerald-700">
           ← Back to your plants
@@ -186,11 +189,16 @@ export default async function PlantDetail({ params }: { params: { id: string } }
       </Link>
 
       <div className="overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-md">
-        <img
-          src={plant.image_url ?? FALLBACK_IMAGE}
-          alt={displayName}
-          className="h-72 w-full object-cover md:h-[22rem]"
-        />
+        <div className="relative h-72 w-full md:h-[22rem]">
+          <Image
+            src={plant.image_url ?? FALLBACK_IMAGE}
+            alt={displayName}
+            fill
+            priority
+            sizes="(max-width: 768px) 100vw, 100vw"
+            className="object-cover"
+          />
+        </div>
         <div className="space-y-6 p-6 md:p-10">
           <header className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
@@ -214,6 +222,10 @@ export default async function PlantDetail({ params }: { params: { id: string } }
               </p>
             ) : null}
           </header>
+
+          <section>
+            <PlantActions plantId={plant.id} currentNickname={plant.nickname} />
+          </section>
 
           <section className="space-y-4">
             <h2 className="text-xl font-semibold text-gray-900">Care requirements</h2>
@@ -328,6 +340,10 @@ export default async function PlantDetail({ params }: { params: { id: string } }
               </ul>
             </section>
           ) : null}
+
+          <section className="space-y-4">
+            <PlantNotes plantId={plant.id} />
+          </section>
         </div>
       </div>
     </div>
