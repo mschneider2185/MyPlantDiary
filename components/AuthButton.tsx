@@ -5,8 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
-const CALLBACK_PATH = "/auth/callback";
-
 type AuthButtonProps = {
   user: User | null;
 };
@@ -28,20 +26,6 @@ export default function AuthButton({ user }: AuthButtonProps) {
     const query = params.toString();
     return query ? `${pathname}?${query}` : pathname;
   }, [pathname, searchParams]);
-
-  const getRedirectUrl = () => {
-    // Since this is client-side code, window.location.origin should always be available
-    // This will use the actual production URL when deployed
-    const origin = typeof window !== "undefined" 
-      ? window.location.origin 
-      : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-
-    const url = new URL(CALLBACK_PATH, origin);
-    if (redirectPath) {
-      url.searchParams.set("redirect", redirectPath);
-    }
-    return url.toString();
-  };
 
   useEffect(() => {
     // Only run this effect when we actually have an auth status to clear.
@@ -97,17 +81,21 @@ export default function AuthButton({ user }: AuthButtonProps) {
     setStatus("loading");
     setError(null);
 
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: getRedirectUrl(),
-      },
+    // Use API route to send magic link server-side with correct production URL
+    const response = await fetch("/api/auth/send-magic-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        redirectPath,
+      }),
     });
 
-    if (signInError) {
+    const data = await response.json();
+
+    if (!response.ok) {
       setStatus("error");
-      setError(signInError.message);
+      setError(data.error || "Failed to send magic link");
       return;
     }
 
