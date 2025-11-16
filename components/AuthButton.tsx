@@ -30,21 +30,11 @@ export default function AuthButton({ user }: AuthButtonProps) {
   }, [pathname, searchParams]);
 
   const getRedirectUrl = () => {
-    const origin =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : process.env.NEXT_PUBLIC_SITE_URL;
-
-    if (!origin) {
-      console.warn(
-        "Supabase magic link requires NEXT_PUBLIC_SITE_URL when running outside the browser."
-      );
-      const fallback = new URL(CALLBACK_PATH, "http://localhost:3000");
-      if (redirectPath) {
-        fallback.searchParams.set("redirect", redirectPath);
-      }
-      return fallback.toString();
-    }
+    // Since this is client-side code, window.location.origin should always be available
+    // This will use the actual production URL when deployed
+    const origin = typeof window !== "undefined" 
+      ? window.location.origin 
+      : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
     const url = new URL(CALLBACK_PATH, origin);
     if (redirectPath) {
