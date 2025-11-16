@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import OpenAI from "openai";
 
 type PlantnetCandidate = {
   score: number;
@@ -24,7 +25,7 @@ type PlantnetResponse = {
 };
 
 export type IdentificationResult = {
-  provider: "plantnet";
+  provider: "plantnet" | "openai";
   plant: {
     commonName: string | null;
     scientificName: string | null;
@@ -48,12 +49,12 @@ function ensureDataUrl(value: string) {
   return value;
 }
 
-function extractBase64(value: string) {
+function parseDataUrl(value: string) {
   const match = /^data:(?<mime>[^;]+);base64,(?<base64>.+)$/.exec(value);
-  if (!match?.groups?.base64) {
+  if (!match?.groups?.base64 || !match.groups.mime) {
     throw new Error("Invalid data URL format.");
   }
-  return match.groups.base64;
+  return { mime: match.groups.mime, base64: match.groups.base64 };
 }
 
 function pickTopResult(results: PlantnetCandidate[] = []) {
@@ -95,17 +96,114 @@ function toIdentification(response: PlantnetResponse): IdentificationResult {
 }
 
 export async function identifyPlant(imageDataUrl: string): Promise<IdentificationResult> {
+  // Defensive: if someone sets PLANTNET_PROJECT=openai by mistake, prefer OpenAI.
+  const hintedProvider =
+    process.env.PLANTNET_PROJECT?.toLowerCase() === "openai"
+      ? "openai"
+      : undefined;
+  const provider = (hintedProvider ?? process.env.PLANT_ID_PROVIDER ?? "plantnet").toLowerCase();
+  if (provider === "openai") {
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!openaiKey) {
+      throw new Error("OPENAI_API_KEY is not set.");
+    }
+    const openai = new OpenAI({ apiKey: openaiKey });
+    const model = process.env.OPENAI_PLANT_VISION_MODEL ?? "gpt-4o-mini";
+
+    const schema = {
+      type: "object",
+      additionalProperties: false,
+      required: ["plant", "alternatives"],
+      properties: {
+        plant: {
+          type: "object",
+          additionalProperties: false,
+          required: ["commonName", "scientificName", "family", "genus", "confidence", "notes"],
+          properties: {
+            commonName: { type: ["string", "null"] },
+            scientificName: { type: ["string", "null"] },
+            family: { type: ["string", "null"] },
+            genus: { type: ["string", "null"] },
+            confidence: { type: ["number", "null"], minimum: 0, maximum: 1 },
+            notes: { type: ["string", "null"] },
+          },
+        },
+        alternatives: {
+          type: "array",
+          maxItems: 4,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["commonName", "scientificName", "confidence"],
+            properties: {
+              commonName: { type: ["string", "null"] },
+              scientificName: { type: ["string", "null"] },
+              confidence: { type: ["number", "null"], minimum: 0, maximum: 1 },
+            },
+          },
+        },
+      },
+    } as const;
+
+    const completion = await openai.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a botanist. Identify the plant in the image. Prefer cultivar-level names when obvious (e.g., 'Marble Queen pothos'). Return JSON only.",
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Identify this plant. Respond using the provided JSON schema." },
+            { type: "image_url", image_url: { url: imageDataUrl } },
+          ],
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "PlantIdentification", schema, strict: true },
+      },
+      temperature: 0.2,
+    });
+
+    const raw = completion.choices[0]?.message?.content;
+    if (!raw) {
+      throw new Error("OpenAI did not return any content.");
+    }
+    const parsed = JSON.parse(raw) as {
+      plant: {
+        commonName: string | null;
+        scientificName: string | null;
+        family: string | null;
+        genus: string | null;
+        confidence: number | null;
+        notes: string | null;
+      };
+      alternatives: Array<{ commonName: string | null; scientificName: string | null; confidence: number | null }>;
+    };
+
+    return {
+      provider: "openai",
+      plant: parsed.plant,
+      alternatives: parsed.alternatives ?? [],
+      raw: parsed as any,
+    };
+  }
+
   const apiKey = process.env.PLANTNET_API_KEY;
   if (!apiKey) {
     throw new Error("PLANTNET_API_KEY is not set.");
   }
 
   const project = process.env.PLANTNET_PROJECT ?? "all";
-  const base64 = extractBase64(ensureDataUrl(imageDataUrl));
+  const { mime, base64 } = parseDataUrl(ensureDataUrl(imageDataUrl));
 
   const formData = new FormData();
   const decoded = Buffer.from(base64, "base64");
-  formData.append("images", new Blob([decoded]), "upload.jpg");
+  const extension = mime === "image/png" ? "png" : "jpg";
+  formData.append("images", new Blob([decoded], { type: mime }), `upload.${extension}`);
   formData.append("organs", "leaf");
 
   const endpoint = new URL(

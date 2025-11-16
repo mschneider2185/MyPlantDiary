@@ -54,6 +54,7 @@ export default function AuthButton({ user }: AuthButtonProps) {
   };
 
   useEffect(() => {
+    // Only run this effect when we actually have an auth status to clear.
     const authStatus = searchParams.get("auth");
     if (!authStatus) return;
 
@@ -77,8 +78,13 @@ export default function AuthButton({ user }: AuthButtonProps) {
     params.delete("message");
     const query = params.toString();
     const cleanPath = query ? `${pathname}?${query}` : pathname;
+
+    // Important: calling replace can trigger a re-render with a new searchParams
+    // object. We deliberately avoid depending on searchParams/pathname to prevent
+    // running this effect again unless 'auth' is present.
     router.replace(cleanPath);
-  }, [pathname, router, searchParams, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const handleSignOut = async () => {
     setStatus("loading");

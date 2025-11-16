@@ -39,11 +39,32 @@ const REQUIRED_PROFILE_FIELDS: (keyof SpeciesRecord)[] = [
   "soil_type",
 ];
 
+const PLACEHOLDER_VALUES = new Set(["string", "n/a", "unknown"]);
+
+function sanitizeStringList(values: string[] | null | undefined) {
+  if (!values) return [];
+  return values
+    .map((value) => value?.trim())
+    .filter((value): value is string => !!value && !PLACEHOLDER_VALUES.has(value.toLowerCase()));
+}
+
+function sanitizeString(value: string | null | undefined) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed || PLACEHOLDER_VALUES.has(trimmed.toLowerCase())) {
+    return null;
+  }
+  return trimmed;
+}
+
 function isProfileComplete(record: SpeciesRecord): boolean {
   return REQUIRED_PROFILE_FIELDS.every((field) => {
     const value = record[field];
     if (Array.isArray(value)) {
-      return value.length > 0;
+      return sanitizeStringList(value).length > 0;
+    }
+    if (typeof value === "string") {
+      return !!sanitizeString(value);
     }
     return value != null && value !== "";
   });
@@ -110,6 +131,9 @@ export async function ensureSpeciesProfile(result: IdentificationResult): Promis
     genus: result.plant.genus,
   });
 
+  const soilMix = sanitizeStringList(profile.soil.mix);
+  const careTips = sanitizeStringList(profile.tips);
+
   const supabase = createAdminClient();
   const updatePayload = {
     care_summary: profile.summary,
@@ -122,12 +146,12 @@ export async function ensureSpeciesProfile(result: IdentificationResult): Promis
     temperature_notes: profile.temperature.description,
     temperature: profile.temperature.rangeF,
     humidity: profile.humidity.headline,
-    soil_type: profile.soil.type,
-    soil: profile.soil.type,
+    soil_type: sanitizeString(profile.soil.type) ?? "Well-draining mix",
+    soil: sanitizeString(profile.soil.type),
     soil_ph_min: profile.soil.phRange.min,
     soil_ph_max: profile.soil.phRange.max,
-    soil_mix: profile.soil.mix.length ? profile.soil.mix : null,
-    care_tips: profile.tips.length ? profile.tips : null,
+    soil_mix: soilMix.length ? soilMix : null,
+    care_tips: careTips.length ? careTips : null,
     profile_generated_at: new Date().toISOString(),
     profile_source: "openai",
   };

@@ -33,7 +33,7 @@ type PlantDetailRecord = {
   id: string;
   nickname: string | null;
   image_url: string | null;
-  species: SpeciesProfile[];
+  species: SpeciesProfile | null;
 };
 
 type PlantDetail = {
@@ -54,7 +54,7 @@ export default async function PlantDetail({ params }: { params: { id: string } }
         id,
         nickname,
         image_url,
-        species:species!inner(
+        species:species(
           id,
           common_name,
           scientific_name,
@@ -99,7 +99,7 @@ export default async function PlantDetail({ params }: { params: { id: string } }
   }
 
   const plantRow = data as PlantDetailRecord;
-  const species = plantRow.species?.[0] ?? null;
+  const species = plantRow.species ?? null;
 
   if (!species) {
     return (
@@ -166,6 +166,18 @@ export default async function PlantDetail({ params }: { params: { id: string } }
 
   const difficultyLabel = species.care_difficulty ?? "Unknown difficulty";
   const generatedAt = species.profile_generated_at ? new Date(species.profile_generated_at) : null;
+  const sanitizedSoilMix =
+    species.soil_mix?.filter((item) => {
+      const trimmed = item?.trim();
+      return trimmed && trimmed.toLowerCase() !== "string";
+    }) ?? [];
+  const soilMixDisplay =
+    sanitizedSoilMix.length > 0 ? sanitizedSoilMix : ["coco coir", "orchid bark", "perlite"];
+  const careTips =
+    species.care_tips?.filter((tip) => {
+      const trimmed = tip?.trim();
+      return trimmed && trimmed.toLowerCase() !== "string";
+    }) ?? [];
 
   return (
     <div className="space-y-10 py-6">
@@ -277,7 +289,7 @@ export default async function PlantDetail({ params }: { params: { id: string } }
                 <div className="sm:col-span-1">
                   <dt className="uppercase tracking-wide text-xs text-gray-500">Recommended mix</dt>
                   <dd className="mt-2 flex flex-wrap gap-2">
-                    {(species.soil_mix && species.soil_mix.length > 0 ? species.soil_mix : ["peat", "perlite", "orchid bark"]).map((mix) => (
+                    {soilMixDisplay.map((mix) => (
                       <span key={mix} className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow">
                         {mix}
                       </span>
@@ -304,11 +316,11 @@ export default async function PlantDetail({ params }: { params: { id: string } }
             </div>
           </section>
 
-          {species.care_tips && species.care_tips.length > 0 ? (
+          {careTips.length > 0 ? (
             <section className="space-y-3">
               <h2 className="text-xl font-semibold text-gray-900">Pro tips</h2>
               <ul className="grid gap-3 sm:grid-cols-2">
-                {species.care_tips.map((tip) => (
+                {careTips.map((tip) => (
                   <li key={tip} className="rounded-3xl border border-emerald-100 bg-white p-4 text-sm text-gray-700 shadow-sm">
                     {tip}
                   </li>

@@ -13,19 +13,27 @@ export function createClient() {
           return cookieStore.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          cookieStore.set({
-            name,
-            value,
-            ...options,
-          });
+          try {
+            cookieStore.set({
+              name,
+              value,
+              ...options,
+            });
+          } catch (error) {
+            console.warn("[supabase] Unable to set cookie in this context", error);
+          }
         },
         remove(name: string, options: CookieOptions) {
-          cookieStore.set({
-            name,
-            value: "",
-            ...options,
-            maxAge: 0,
-          });
+          try {
+            cookieStore.set({
+              name,
+              value: "",
+              ...options,
+              maxAge: 0,
+            });
+          } catch (error) {
+            console.warn("[supabase] Unable to remove cookie in this context", error);
+          }
         },
       },
     }

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 
 type IdentificationResult = {
   provider: "plantnet";
@@ -38,6 +39,17 @@ type SpeciesProfile = {
   profile_generated_at: string | null;
 };
 
+type PlantRecord = {
+  id: string;
+  nickname: string | null;
+  image_url: string | null;
+  species: {
+    id: string;
+    common_name: string | null;
+    scientific_name: string | null;
+  } | null;
+};
+
 const formatConfidence = (value: number | null) => {
   if (value == null) return null;
   return `${Math.round(value * 100)}% match`;
@@ -50,16 +62,73 @@ export default function UploadPlantImage() {
   const [showRaw, setShowRaw] = useState(false);
   const [result, setResult] = useState<IdentificationResult | null>(null);
   const [species, setSpecies] = useState<SpeciesProfile | null>(null);
+  const [nickname, setNickname] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedPlant, setSavedPlant] = useState<PlantRecord | null>(null);
 
-  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const sanitizedSoilMix =
+    species?.soil_mix?.filter((mix) => {
+      const trimmed = mix?.trim();
+      return trimmed && trimmed.toLowerCase() !== "string";
+    }) ?? [];
+  const soilMixDisplay =
+    sanitizedSoilMix.length > 0 ? sanitizedSoilMix : ["coco coir", "orchid bark", "perlite"];
+  const careTips =
+    species?.care_tips?.filter((tip) => {
+      const trimmed = tip?.trim();
+      return trimmed && trimmed.toLowerCase() !== "string";
+    }) ?? [];
+
+  async function ensureJpegOrPng(dataUrl: string): Promise<string> {
+    // If already jpeg or png, return as-is
+    const mimeMatch = /^data:(?<mime>[^;]+);base64,/.exec(dataUrl);
+    const mime = mimeMatch?.groups?.mime ?? "";
+    if (mime === "image/jpeg" || mime === "image/png") return dataUrl;
+
+    // Convert other formats (e.g., webp/heic) to jpeg client-side
+    // by drawing to a canvas and exporting as JPEG.
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      const loaded = new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Failed to load image for conversion."));
+      });
+      img.src = dataUrl;
+      await loaded;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Unable to create canvas context.");
+      ctx.drawImage(img, 0, 0);
+      // Use high-quality JPEG to preserve details
+      const converted = canvas.toDataURL("image/jpeg", 0.95);
+      return converted;
+    } catch {
+      // Fall back to original if conversion fails
+      return dataUrl;
+    }
+  }
+
+  const onChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setImage(reader.result as string);
+    reader.onload = async () => {
+      const raw = reader.result as string;
+      const safe = await ensureJpegOrPng(raw);
+      setImage(safe);
+    };
     reader.readAsDataURL(file);
     setResult(null);
     setSpecies(null);
     setError(null);
+    setNickname("");
+    setSaveError(null);
+    setSavedPlant(null);
   };
 
   const onIdentify = async () => {
@@ -89,13 +158,51 @@ export default function UploadPlantImage() {
       }
       setResult(data.result);
       setSpecies(data.species ?? null);
+      setSavedPlant(null);
+      setSaveError(null);
+      setNickname(data.result.plant.commonName ?? "");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Something went wrong.";
       setError(message);
       setResult(null);
       setSpecies(null);
+      setSavedPlant(null);
+      setSaveError(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const onSavePlant = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!species) return;
+    setSaving(true);
+    setSaveError(null);
+
+    try {
+      const res = await fetch("/api/plants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          speciesId: species.id,
+          nickname: nickname.trim() || undefined,
+          imageBase64: image ?? undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Unable to save plant.");
+      }
+
+      const data = (await res.json()) as { plant: PlantRecord };
+      setSavedPlant(data.plant);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save plant.";
+      setSaveError(message);
+      setSavedPlant(null);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -230,10 +337,7 @@ export default function UploadPlantImage() {
                 <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
                   <p className="text-xs uppercase tracking-wide text-emerald-700">Soil mix</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {(species.soil_mix && species.soil_mix.length > 0
-                      ? species.soil_mix
-                      : ["coco coir", "orchid bark", "perlite"]
-                    ).map((mix) => (
+                    {soilMixDisplay.map((mix) => (
                       <span
                         key={mix}
                         className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow-sm"
@@ -260,11 +364,11 @@ export default function UploadPlantImage() {
                 </div>
               </div>
 
-              {species.care_tips && species.care_tips.length > 0 && (
+              {careTips.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-wide text-emerald-700">Pro tips</p>
                   <ul className="grid gap-3 md:grid-cols-2">
-                    {species.care_tips.map((tip) => (
+                    {careTips.map((tip) => (
                       <li key={tip} className="rounded-2xl border border-emerald-100 bg-white p-3 text-sm text-gray-700 shadow-sm">
                         {tip}
                       </li>
@@ -284,6 +388,43 @@ export default function UploadPlantImage() {
                   .
                 </p>
               )}
+
+              <form onSubmit={onSavePlant} className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+                <div>
+                  <label htmlFor="nickname" className="text-xs uppercase tracking-wide text-emerald-700">
+                    Plant nickname
+                  </label>
+                  <input
+                    id="nickname"
+                    type="text"
+                    value={nickname}
+                    onChange={(event) => setNickname(event.target.value)}
+                    placeholder="e.g. Kitchen Shelf Pothos"
+                    className="mt-2 w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <button
+                    type="submit"
+                    className="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:pointer-events-none disabled:opacity-60"
+                    disabled={saving}
+                  >
+                    {saving ? "Saving…" : "Save to My Plants"}
+                  </button>
+                  {savedPlant && (
+                    <Link
+                      href={`/plants/${savedPlant.id}`}
+                      className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
+                    >
+                      View plant →
+                    </Link>
+                  )}
+                </div>
+                {saveError && <p className="text-xs text-rose-600">{saveError}</p>}
+                {!saveError && savedPlant && (
+                  <p className="text-xs text-emerald-700">Saved to your garden!</p>
+                )}
+              </form>
             </section>
           )}
 
