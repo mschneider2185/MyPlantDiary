@@ -101,8 +101,12 @@ export default async function PlantDetail({ params }: { params: { id: string } }
     );
   }
 
-  const plantRow = data as PlantDetailRecord;
-  const species = plantRow.species ?? null;
+  // Transform the data to handle Supabase returning species as an array
+  const plantRow: PlantDetailRecord = {
+    ...data,
+    species: Array.isArray(data.species) ? (data.species[0] ?? null) : data.species ?? null,
+  };
+  const species = plantRow.species;
 
   if (!species) {
     return (
