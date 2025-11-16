@@ -1,12 +1,22 @@
 import Link from "next/link";
 import Image from "next/image";
+import AuthButton from "@/components/AuthButton";
+import { createClient } from "@/lib/supabase/server";
 
-export default function MarketingPage() {
+export default async function MarketingPage() {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-16">
-      <div className="flex items-center gap-4">
-        <Image src="/logo.svg" alt="MyPlantDiary" width={48} height={48} />
-        <h1 className="text-3xl font-bold">MyPlantDiary</h1>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Image src="/logo.svg" alt="MyPlantDiary" width={48} height={48} />
+          <h1 className="text-3xl font-bold">MyPlantDiary</h1>
+        </div>
+        <AuthButton user={user} />
       </div>
       <p className="mt-4 text-lg text-gray-700">
         Snap a photo to identify plants, learn how to care for them, and keep a journal as they grow.
