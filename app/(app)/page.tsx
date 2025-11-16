@@ -14,7 +14,7 @@ export default async function DashboardPage() {
     redirect("/marketing");
   }
 
-  const { data: plants, error } = await supabase
+  const { data: plantsData, error } = await supabase
     .from("plants")
     .select(
       `
@@ -37,6 +37,14 @@ export default async function DashboardPage() {
   if (error) {
     console.error("[dashboard] failed to load plants", error);
   }
+
+  // Transform the data to match PlantCard's expected type
+  // Supabase returns species as an array for foreign key relationships, but we need a single object or null
+  const plants =
+    plantsData?.map((plant) => ({
+      ...plant,
+      species: Array.isArray(plant.species) ? (plant.species[0] ?? null) : plant.species ?? null,
+    })) ?? [];
 
   return (
     <main>

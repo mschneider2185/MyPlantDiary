@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 
 type JournalEntry = {
@@ -247,7 +248,9 @@ export default function PlantNotes({ plantId }: PlantNotesProps) {
 								</div>
 								<p className="mt-2 whitespace-pre-wrap text-sm text-gray-800">{entry.body}</p>
 								{entry.photo_url ? (
-									<img src={entry.photo_url} alt="" className="mt-3 max-h-60 w-full rounded-xl object-cover" />
+									<div className="relative mt-3 h-60 w-full overflow-hidden rounded-xl">
+										<Image src={entry.photo_url} alt="" fill className="object-cover" />
+									</div>
 								) : null}
 							</li>
 						))}
