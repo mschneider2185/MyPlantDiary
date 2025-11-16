@@ -94,7 +94,7 @@ export default function UploadPlantImage() {
     // Convert other formats (e.g., webp/heic) to jpeg client-side
     // by drawing to a canvas and exporting as JPEG.
     try {
-      const img = new Image();
+      const img = new window.Image();
       img.crossOrigin = "anonymous";
       const loaded = new Promise<void>((resolve, reject) => {
         img.onload = () => resolve();

@@ -8,15 +8,25 @@ function isValidRedirect(path: string | null) {
   return path.startsWith("/") && !path.startsWith("//");
 }
 
+function getOrigin(url: URL, requestUrl: string): string {
+  if (url.origin) return url.origin;
+  if (url.protocol && url.host) return `${url.protocol}//${url.host}`;
+  const requestUrlObj = new URL(requestUrl);
+  if (requestUrlObj.origin) return requestUrlObj.origin;
+  if (requestUrlObj.protocol && requestUrlObj.host) return `${requestUrlObj.protocol}//${requestUrlObj.host}`;
+  // Fallback: extract from request URL string
+  const parts = requestUrl.split('/');
+  return parts.slice(0, 3).join('/') || "/";
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("redirect");
 
-  const redirectPath = isValidRedirect(next) ? next : DEFAULT_REDIRECT;
-  // url.origin should always exist for HTTP/HTTPS URLs, but TypeScript allows null
-  // Construct origin from protocol and host if origin is null (shouldn't happen in practice)
-  const baseUrl = url.origin || `${url.protocol}//${url.host}`;
+  const redirectPath: string = isValidRedirect(next) ? (next as string) : DEFAULT_REDIRECT;
+  // Extract origin safely - for HTTP/HTTPS URLs this should always exist
+  const baseUrl: string = getOrigin(url, request.url);
   const redirectUrl = new URL(redirectPath, baseUrl);
 
   if (!code) {

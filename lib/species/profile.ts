@@ -66,7 +66,8 @@ function isProfileComplete(record: SpeciesRecord): boolean {
     if (typeof value === "string") {
       return !!sanitizeString(value);
     }
-    return value != null && value !== "";
+    // For non-string, non-array values, just check they're not null
+    return value != null;
   });
 }
 
