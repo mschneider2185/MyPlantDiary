@@ -42,8 +42,17 @@ export default function AuthButton({ user }: AuthButtonProps) {
         setStatus("error");
         setError("Magic link is missing a code. Request a new one.");
       } else if (authStatus === "success") {
-        setStatus("sent");
-        setError(null);
+        // On success, refresh the page to pick up the new session
+        // The session should be set by the callback route
+        router.refresh();
+        // Clean up URL params after refresh
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete("auth");
+        params.delete("message");
+        const query = params.toString();
+        const cleanPath = query ? `${pathname}?${query}` : pathname;
+        router.replace(cleanPath);
+        return;
       }
     }
 
@@ -58,7 +67,7 @@ export default function AuthButton({ user }: AuthButtonProps) {
     // running this effect again unless 'auth' is present.
     router.replace(cleanPath);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, searchParams]);
 
   const handleSignOut = async () => {
     setStatus("loading");

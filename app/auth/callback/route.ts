@@ -35,14 +35,37 @@ export async function GET(request: Request) {
   }
 
   const supabase = createClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
+    console.error("[auth:callback] failed to exchange code", error);
     redirectUrl.searchParams.set("auth", "error");
     redirectUrl.searchParams.set("message", error.message);
     return NextResponse.redirect(redirectUrl);
   }
 
+  // Verify session was created
+  if (!data.session) {
+    console.error("[auth:callback] no session returned after code exchange");
+    redirectUrl.searchParams.set("auth", "error");
+    redirectUrl.searchParams.set("message", "Failed to create session");
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // Verify user was set
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    console.error("[auth:callback] no user found after session creation");
+    redirectUrl.searchParams.set("auth", "error");
+    redirectUrl.searchParams.set("message", "Failed to authenticate user");
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // Redirect with success - cookies should be set by exchangeCodeForSession
   redirectUrl.searchParams.set("auth", "success");
-  return NextResponse.redirect(redirectUrl);
+  // Use redirect with a 303 status to force a fresh request
+  return NextResponse.redirect(redirectUrl, { status: 303 });
 }
