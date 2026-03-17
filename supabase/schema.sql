@@ -41,7 +41,7 @@ create table if not exists public.species (
 -- Plants owned by a user
 create table if not exists public.plants (
   id uuid primary key default uuid_generate_v4(),
-  owner_id uuid not null,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   species_id uuid references public.species(id) on delete set null,
   nickname text,
   image_url text,

@@ -52,7 +52,11 @@ export default async function DashboardPage() {
       <div className="mt-4">
         <UploadPlantImage />
       </div>
-      {!plants || plants.length === 0 ? (
+      {error ? (
+        <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          Unable to load your plants. Please try refreshing the page.
+        </div>
+      ) : plants.length === 0 ? (
         <EmptyState title="No plants yet" description="Upload a photo to identify and add a plant." />
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
